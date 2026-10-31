@@ -12,12 +12,13 @@ import {
   CodeIcon,
   FileTextIcon,
   CompassIcon,
+  LightbulbIcon,
 } from './Icons';
 import { useScrollReveal } from '../hooks/useScrollReveal';
 import { ProgressRing, StatTile, MiniBarChart, DividerLabel } from './Shared';
 import { FlightPath } from './graphics/FlightPath';
 import { JourneyMap } from './graphics/JourneyMap';
-import type { JourneyStep } from './graphics/JourneyMap';
+import type { JourneyStep, JourneyStatus } from './graphics/JourneyMap';
 import { Achievement } from './graphics/Achievement';
 import { getJson } from '../services/apiClient';
 
@@ -50,7 +51,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
         const res = await getJson<{ activities: ActivityItem[] }>('/api/progress');
         if (res?.activities) setActivities(res.activities);
       } catch {
-        // Fallback
+        // Fallback — no activities
       }
     }
     fetchActivities();
@@ -58,15 +59,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
 
   // Daily challenge data
   const dailyChallenge = {
-    question: "During a technical interview, you realize you made a major mistake in a coding solution you explained 5 minutes ago. What is the best course of action?",
+    question:
+      "During a technical interview, you realize you made a major mistake in a coding solution you explained 5 minutes ago. What is the best course of action?",
     options: [
       "Ignore it and hope the interviewer doesn't notice.",
       "Politely interrupt your current explanation, point out the error, explain why it happened, and present the corrected logic.",
       "Wait until the end of the interview to send a follow-up email with the fix.",
-      "Argue that the error is actually a valid alternative approach."
+      "Argue that the error is actually a valid alternative approach.",
     ],
     correctIndex: 1,
-    explanation: "Acknowledging mistakes proactively shows integrity, strong communication skills, and emotional intelligence. Interviewers respect candidates who can audit and correct their own work under pressure."
+    explanation:
+      "Acknowledging mistakes proactively shows integrity, strong communication skills, and emotional intelligence. Interviewers respect candidates who can audit and correct their own work under pressure.",
   };
 
   const handleDailySubmit = (index: number) => {
@@ -82,18 +85,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
   // Helper to calculate progress percentage across modules
   const getProgressPercent = (track: 'tech' | 'code' | 'apt' | 'mock' | 'resume' | 'tracker') => {
     let completed = 0;
-    let total = 4;
+    let total = 1;
     if (track === 'tech') {
-      completed = progress.completedLessons.filter(l => l.startsWith('c-') || l.startsWith('python-') || l.startsWith('java-') || l.startsWith('dsa-') || l.startsWith('dbms-') || l.startsWith('os-')).length;
+      completed = progress.completedLessons.filter(
+        (l) =>
+          l.startsWith('c-') ||
+          l.startsWith('python-') ||
+          l.startsWith('java-') ||
+          l.startsWith('dsa-') ||
+          l.startsWith('dbms-') ||
+          l.startsWith('os-'),
+      ).length;
       total = 6;
     } else if (track === 'code') {
-      completed = progress.completedLessons.filter(l => l.startsWith('sub_') || l === 'two-sum').length + 1;
+      completed = progress.completedLessons.filter((l) => l.startsWith('sub_') || l === 'two-sum').length + 1;
       total = 5;
     } else if (track === 'apt') {
-      completed = progress.completedLessons.filter(l => l.startsWith('apt-')).length + 1;
+      completed = progress.completedLessons.filter((l) => l.startsWith('apt-')).length + 1;
       total = 4;
     } else if (track === 'mock') {
-      completed = progress.completedLessons.filter(l => l.startsWith('mock-')).length + 1;
+      completed = progress.completedLessons.filter((l) => l.startsWith('mock-')).length + 1;
       total = 3;
     } else if (track === 'resume') {
       completed = 1;
@@ -177,13 +188,26 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
   const overallReadiness = Math.round(tracks.reduce((sum, t) => sum + t.pct, 0) / tracks.length);
   const modulesDone = progress.completedLessons.length;
 
-  const journeySteps: JourneyStep[] = [
-    { label: 'Foundation', caption: 'CS Core Topics', icon: <CodeIcon size={20} />, status: 'done' },
-    { label: 'Coding Lab', caption: 'Problem Solving', icon: <PlayIcon size={20} />, status: 'done' },
-    { label: 'Aptitude', caption: 'Timed Drills', icon: <MindIcon size={20} />, status: 'current' },
-    { label: 'Interviews', caption: 'Mock Simulations', icon: <BriefcaseIcon size={20} />, status: 'todo' },
-    { label: 'Placement', caption: 'Target Offer', icon: <RocketIcon size={20} />, status: 'todo' },
+  // Journey steps derived from real progress
+  const done = (prefix: string) => progress.completedLessons.some((l) => l.startsWith(prefix));
+  const journeyRaw = [
+    { label: 'Foundation', caption: 'CS Core Topics', icon: <CodeIcon size={20} />, complete: true },
+    { label: 'Coding Lab', caption: 'Problem Solving', icon: <PlayIcon size={20} />, complete: done('sub_') || done('two-sum') },
+    { label: 'Aptitude', caption: 'Timed Drills', icon: <MindIcon size={20} />, complete: done('apt-') },
+    { label: 'Interviews', caption: 'Mock Simulations', icon: <BriefcaseIcon size={20} />, complete: done('mock-') },
+    { label: 'Placement', caption: 'Target Offer', icon: <RocketIcon size={20} />, complete: false },
   ];
+
+  let currentTaken = false;
+  const journeySteps: JourneyStep[] = journeyRaw.map((s) => {
+    let status: JourneyStatus;
+    if (s.complete) status = 'done';
+    else if (!currentTaken) {
+      status = 'current';
+      currentTaken = true;
+    } else status = 'todo';
+    return { label: s.label, caption: s.caption, icon: s.icon, status };
+  });
 
   const chartData = tracks.slice(0, 5).map((t) => ({
     label: t.badge.split(' ')[0],
@@ -205,7 +229,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
       />
 
       {/* Hero Banner */}
-      <div className="section-hero dashboard-hero" style={{ '--hero-wash': 'var(--accent-soft)' } as React.CSSProperties}>
+      <div
+        className="section-hero dashboard-hero"
+        style={{ '--hero-wash': 'var(--accent-soft)' } as React.CSSProperties}
+      >
         <FlightPath className="dashboard-hero-path" />
         <div className="section-hero-inner">
           <div className="section-hero-icon" style={{ fontSize: '1.6rem' }}>
@@ -216,7 +243,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
               Welcome back, <span className="gradient-text-cyan-violet">{studentName}</span>
             </h2>
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', maxWidth: '640px' }}>
-              Preparing for <strong>{targetJob}</strong>. Practice core CS concepts, algorithmic sandboxes, aptitude tests, and AI mock interviews.
+              Preparing for <strong>{targetJob}</strong>. Practice core CS concepts, algorithmic
+              sandboxes, aptitude tests, and AI mock interviews.
             </p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -231,11 +259,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
       </div>
 
       {/* Stats Row */}
-      <div ref={statsRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' }}>
+      <div
+        ref={statsRef}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px' }}
+      >
         <div className="reveal-item">
           <StatTile
             icon={<AwardIcon size={22} />}
-            value={<>{progress.totalScore} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>XP</span></>}
+            value={
+              <>
+                {progress.totalScore}{' '}
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>XP</span>
+              </>
+            }
             label="Cumulative Score"
             color="var(--accent)"
             tint="var(--accent-soft)"
@@ -244,7 +280,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
         <div className="reveal-item">
           <StatTile
             icon={<FlameIcon size={22} />}
-            value={<>{progress.streak} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Days</span></>}
+            value={
+              <>
+                {progress.streak}{' '}
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>Days</span>
+              </>
+            }
             label="Practice Streak"
             color="var(--accent-warm)"
             tint="var(--accent-warm-soft)"
@@ -262,7 +303,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
         <div className="reveal-item">
           <StatTile
             icon={<MindIcon size={22} />}
-            value={<>{overallReadiness}<span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span></>}
+            value={
+              <>
+                {overallReadiness}
+                <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>%</span>
+              </>
+            }
             label="Placement Readiness"
             color="var(--accent-violet)"
             tint="rgba(124, 58, 237, 0.12)"
@@ -284,7 +330,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
             <div>
               <h3 style={{ fontSize: '1.25rem', marginBottom: '4px' }}>Placement Readiness</h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.86rem', maxWidth: '280px' }}>
-                Composite index across Core CS, Coding, Aptitude, Mock Interviews, and Resume ATS alignment.
+                Composite index across Core CS, Coding, Aptitude, Mock Interviews, and Resume ATS
+                alignment.
               </p>
             </div>
           </div>
@@ -296,7 +343,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
       </div>
 
       {/* Learning Tracks Grid & Daily Challenge / Activity */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(380px, 1.7fr) minmax(300px, 1.1fr)', gap: '24px', alignItems: 'start' }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(380px, 1.7fr) minmax(300px, 1.1fr)',
+          gap: '24px',
+          alignItems: 'start',
+        }}
+      >
         {/* Left: 6 Modules Grid */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -304,7 +358,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
             <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Click any module to practice</span>
           </div>
 
-          <div ref={tracksRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
+          <div
+            ref={tracksRef}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '14px',
+            }}
+          >
             {tracks.map((track) => (
               <div
                 key={track.id}
@@ -323,10 +384,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: track.tint, color: track.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '8px',
+                        background: track.tint,
+                        color: track.color,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
                       {track.icon}
                     </div>
-                    <span className={`badge ${track.badgeClass}`} style={{ fontSize: '0.72rem' }}>{track.badge}</span>
+                    <span className={`badge ${track.badgeClass}`} style={{ fontSize: '0.72rem' }}>
+                      {track.badge}
+                    </span>
                   </div>
                   <ProgressRing percentage={track.pct} size={46} stroke={4} color={track.color} />
                 </div>
@@ -340,7 +414,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
                   </p>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--card-border)', fontSize: '0.75rem', color: 'var(--accent)' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: '8px',
+                    borderTop: '1px solid var(--card-border)',
+                    fontSize: '0.75rem',
+                    color: 'var(--accent)',
+                  }}
+                >
                   <span>Launch Module</span>
                   <ChevronRightIcon size={14} />
                 </div>
@@ -387,13 +471,54 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
             </div>
 
             {dailyAnswered && (
-              <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                <strong style={{ color: selectedDailyOption === dailyChallenge.correctIndex ? 'var(--accent-emerald)' : 'var(--accent-rose)' }}>
+              <div
+                className="animate-fade-in"
+                style={{
+                  padding: '12px',
+                  background: 'var(--bg-secondary)',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  color: 'var(--text-secondary)',
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong
+                  style={{
+                    color:
+                      selectedDailyOption === dailyChallenge.correctIndex
+                        ? 'var(--accent-emerald)'
+                        : 'var(--accent-rose)',
+                  }}
+                >
                   {selectedDailyOption === dailyChallenge.correctIndex ? '✓ Correct! ' : '✕ Incorrect. '}
                 </strong>
                 {dailyChallenge.explanation}
               </div>
             )}
+          </div>
+
+          {/* Interview Checklist Tip */}
+          <div className="panel" style={{ display: 'flex', gap: '16px' }}>
+            <div
+              className="flex-center"
+              style={{
+                flexShrink: 0,
+                width: '40px',
+                height: '40px',
+                borderRadius: '10px',
+                background: 'var(--accent-warm-soft)',
+                color: 'var(--accent-warm)',
+              }}
+            >
+              <LightbulbIcon size={20} />
+            </div>
+            <div>
+              <h5 style={{ fontSize: '1rem', marginBottom: '4px' }}>Interview Checklist Tip</h5>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                Always research the company's core values before an interview. Incorporate those values
+                seamlessly when answering behavioral questions using the STAR framework.
+              </p>
+            </div>
           </div>
 
           {/* Recent Platform Activities */}
@@ -416,7 +541,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ progress, user, onNavigate
                     }}
                   >
                     <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{act.title}</span>
-                    <span className="badge badge-violet" style={{ fontSize: '0.7rem' }}>+{act.xpEarned} XP</span>
+                    <span className="badge badge-violet" style={{ fontSize: '0.7rem' }}>
+                      +{act.xpEarned} XP
+                    </span>
                   </div>
                 ))}
               </div>
